@@ -1,5 +1,5 @@
 # Fox-One
-About Block, Bypass, Filter Fox One Ads using AdGuard
+Block, Bypass, Filter Fox One Ads using AdGuard
 
 These rulesets use a two-layer approach combining AdGuard Home (AGH) at the DNS level and AdGuard Premium (AGP) at the HTTPS filtering level to suppress ads across streaming platforms without breaking playback.
 Layer 1 — AGH (DNS): Wildcard and pattern-based domain rules intercept ad infrastructure at the network level. Rather than returning NXDOMAIN — which causes SDKs to treat the failure as a transient network error and retry aggressively — targeted domains are sinkholed using dnsrewrite=NOERROR;A;0.0.0.0. This returns a valid DNS response pointing to a null address, causing the TCP connection to fail silently. The ad SDK registers the request as resolved rather than failed, eliminating retry loops while keeping the player stable. Core playback domains are explicitly allowlisted so stream delivery, authentication, and manifest requests are never interrupted.
