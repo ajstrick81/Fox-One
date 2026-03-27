@@ -1,22 +1,30 @@
 ! ============================================================
-! FOX ONE — AGP FULL RULESET (DNS + HTTPS)
+! FOX ONE — AGP PHONE RULESET v4.5 (Android)
 ! Updated: 2026-03-27
-! TESTED Devices: Windows PC, Android Phone (AGP only, no AGH router)
+! Replaces: foxone_phone_agp_only.txt
 !
-! This file combines DNS-level blocking and HTTPS-level
-! creative segment interception in a single ruleset.
-! Requires HTTPS filtering enabled in AGP settings and
-! AdGuard CA certificate installed under:
-! Settings → Security → Trusted Credentials → User
-! Without the CA cert, sections 1 and 2 are inactive.
+! Changes from previous phone ruleset:
+!   - Removed ALL $dnsrewrite=NOERROR;A;0.0.0.0 syntax —
+!     confirmed via AGP journal log that dnsrewrite is an
+!     AGH-only feature. AGP on Android silently rejects
+!     these rules entirely:
+!     "Rule rejected by all filters: ||fwmrm.net^$dnsrewrite..."
+!   - Replaced with plain ^$important blocks — AGP returns
+!     NXDOMAIN natively which is correct behavior for a
+!     standalone DNS filter without AGH
+!   - Fox One app must be ENABLED in AGP HTTPS filtering
+!     apps list (disabled by default on install)
+!   - HTTPS intermediate cert must be installed for
+!     sections 1 and 2 to be active
 ! ============================================================
 
 ! ============================================================
 ! 0. ESSENTIAL ALLOWLISTS (DO NOT REMOVE)
+! -------------------------------------------------------
+! fa.edge.foxdtc and foxdtc-video.akamaized intentionally
+! have NO $important — allows creatives redirect rule in
+! section 1 to override for /creatives/ path only.
 ! ============================================================
-
-! Fox One video CDN — NO $important (allows creatives
-! block rule in section 2 to override for /creatives/ path)
 @@||fa.edge.foxdtc.digitalvideoplatform.com^
 @@||cf.edge.foxdtc.digitalvideoplatform.com^
 @@||foxdtc-video.akamaized.net^
@@ -48,9 +56,9 @@
 ! 1. HTTPS LAYER — VOD AD CREATIVE SEGMENT INTERCEPT
 ! -------------------------------------------------------
 ! Returns HTTP 200 + empty body instead of dropping TCP.
-! Bitmovin advances through empty MPEG-TS frames cleanly
-! without throwing NETWORK_ERROR.
-! Requires HTTPS filtering + CA cert active on device.
+! Bitmovin advances through empty MPEG-TS frames cleanly.
+! Requires Fox One enabled in AGP HTTPS filtering apps list
+! and HTTPS intermediate cert installed.
 ! ============================================================
 ||fa.edge.foxdtc.digitalvideoplatform.com/*/creatives/*$redirect=nooptext,important
 ||foxdtc-video.akamaized.net/*/creatives/*$redirect=nooptext,important
@@ -64,7 +72,6 @@
 *fa.edge.foxdtc*.m3u8*$removeparam=ad,important
 
 ! Live stream — full Yospace session param strip
-! Confirmed from live FS1 manifest capture 2026-03-27
 *foxdtc-video.akamaized.net*.m3u8*$removeparam=yo.aas,important
 *foxdtc-video.akamaized.net*.m3u8*$removeparam=yo.pk,important
 *foxdtc-video.akamaized.net*.m3u8*$removeparam=yo.ap,important
@@ -79,50 +86,46 @@
 *foxdtc-video.akamaized.net*.m3u8*$removeparam=ad_env,important
 *foxdtc-video.akamaized.net*.m3u8*$removeparam=ad,important
 
-! ============================================================
-! 3. DNS LAYER — FREEWHEEL (NOERROR sinkhole)
-! Eliminates retry avalanche vs hard NXDOMAIN block
-! ============================================================
-||fwmrm.net^$dnsrewrite=NOERROR;A;0.0.0.0
-||fwgtm.akadns.net^$dnsrewrite=NOERROR;A;0.0.0.0
+! Legacy Fox Sports
+*foxvideo-sports*.m3u8*$removeparam=yo.aas,important
+*foxvideo-sports*.m3u8*$removeparam=yo.pk,important
+*foxvideo-sports*.m3u8*$removeparam=yo.ap,important
+*foxvideo-sports*.m3u8*$removeparam=yo.ai,important
+*foxvideo-sports*.m3u8*$removeparam=yo.av,important
+*foxvideo-sports*.m3u8*$removeparam=yo.lpa,important
+*foxvideo-sports*.m3u8*$removeparam=yo.mv,important
+*foxvideo-sports*.m3u8*$removeparam=yo.pbr,important
+*foxvideo-sports*.m3u8*$removeparam=yo.pdt,important
+*foxvideo-sports*.m3u8*$removeparam=yo.pst,important
+*foxvideo-sports*.m3u8*$removeparam=yo.up,important
+*foxvideo-sports*.m3u8*$removeparam=ad_env,important
 
 ! ============================================================
-! 4. DNS LAYER — TUBI / ADRISE (NOERROR sinkhole)
-! CSAI ad decision engine for Fox One
+! 3. DNS LAYER — FREEWHEEL
+! Plain $important replaces dnsrewrite (AGP Android)
 ! ============================================================
-||ads.production-public.tubi.io^$dnsrewrite=NOERROR;A;0.0.0.0
+||fwmrm.net^$important
+||fwgtm.akadns.net^$important
+
+! ============================================================
+! 4. DNS LAYER — TUBI / ADRISE
+! Plain $important replaces dnsrewrite (AGP Android)
+! ============================================================
+||ads.production-public.tubi.io^$important
 
 ! ============================================================
 ! 5. DNS LAYER — PROGRAMMATIC AD ECOSYSTEM
 ! ============================================================
-
-! DoubleVerify — viewability verification
 ||doubleverify.com^$important
 ||dv.tech^$important
-
-! The Trade Desk — programmatic DSP/bidding
 ||adsrvr.org^$important
-
-! Flashtalking — ad creative serving
 ||flashtalking.com^$important
-
-! Innovid — CTV ad serving
 ||innovid.com^$important
-
-! IAS / AdSafe — brand safety
 ||adsafeprotected.com^$important
-
-! Neustar / Agkn — audience data
 ||agkn.com^$important
-
-! iSpot.tv — CTV measurement
 ||ispot.tv^$important
-
-! TVPixel — CTV measurement
 ||tvpixel.com^$important
-
-! VideoAmp — ad audience measurement
-||videoamp.com^$dnsrewrite=NOERROR;A;0.0.0.0
+||videoamp.com^$important
 
 ! ============================================================
 ! 6. DNS LAYER — NIELSEN / COMSCORE / MEASUREMENT
@@ -162,7 +165,7 @@
 ! 9. DNS LAYER — TRACKERS & TELEMETRY
 ! ============================================================
 
-! AppsFlyer — mobile attribution (he18fa- = ESPN/Fox account)
+! AppsFlyer — he18fa- prefix = Fox/ESPN account tag
 ||appsflyersdk.com^$important
 
 ! Braze — push/engagement SDK
@@ -180,10 +183,10 @@
 ! Fox Pyxis — ad event telemetry
 ||prod.pyxis.atp.fox^$important
 
-! Loki — Fox internal log ingestion / behavioral telemetry
+! Loki — Fox internal behavioral telemetry
 ||loki-ingest.fox.com^$important
 
-! Conviva — video QoS (hashed subdomain pattern)
+! Conviva — video QoS
 ||cws.conviva.com^$important
 ||appgw.conviva.com^$important
 
@@ -220,6 +223,10 @@
 ! Minute.ly — ad launcher
 ||service.minute.ly^$important
 
+! Classic ad SDK neutralization
+||mssl.fwmrm.net/libs/adm/*/AdManager.js$script,redirect=noopjs,important
+||imasdk.googleapis.com/js/sdkloader/ima3.js$script,redirect=noopjs,important
+
 ! ============================================================
-! END — FOX ONE AGP PHONE RULESET
-! ========================================
+! END — FOX ONE AGP PHONE RULESET v4.5
+! ============================================================
