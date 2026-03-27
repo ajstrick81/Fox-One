@@ -1,43 +1,22 @@
 ! ============================================================
-! FOX ONE — SSAI / HTTPS FILTER RULES v4.4 (AGP)
+! FOX ONE — AGP PHONE RULESET (DNS + HTTPS)
 ! Updated: 2026-03-27
-! Replaces: foxone_ssai_v4_3_agp.txt
+! Device: Android Phone (AGP only, no AGH router)
 !
-! *** FIX IN THIS VERSION ***
-! v4.3 confirmed pre-rolls blocked successfully. Mid-rolls
-! were causing NETWORK_ERROR and stopping playback entirely.
-!
-! Root cause: creatives block rule was dropping the TCP
-! connection (status=0 in AGP log). Bitmovin receives a
-! sudden connection refusal mid-stream and throws
-! NETWORK_ERROR — it has no graceful handling for a dead
-! connection during active media pipeline playback.
-!
-! Pre-rolls skip cleanly because Bitmovin has higher
-! tolerance for segment failures before content begins.
-! Mid-rolls are catastrophic — player is already in a
-! running pipeline and connection refusal breaks it.
-!
-! Fix: redirect=nooptext instead of hard block.
-! AGP returns HTTP 200 with empty body. Bitmovin receives
-! a valid response, attempts to decode zero bytes as
-! MPEG-TS, gets empty/corrupt frame, and advances past
-! the segment rather than throwing NETWORK_ERROR.
-!
-! The single changed lines vs v4.3:
-!   BEFORE: .../creatives/*$important
-!   AFTER:  .../creatives/*$redirect=nooptext,important
+! This file combines DNS-level blocking and HTTPS-level
+! creative segment interception in a single ruleset.
+! Requires HTTPS filtering enabled in AGP settings and
+! AdGuard CA certificate installed under:
+! Settings → Security → Trusted Credentials → User
+! Without the CA cert, sections 1 and 2 are inactive.
 ! ============================================================
 
-! ------------------------------------------------------------
-! 0. ALLOWLISTS — VIDEO DELIVERY AND APP INFRASTRUCTURE
-! -------------------------------------------------------
-! fa.edge.foxdtc and foxdtc-video.akamaized intentionally
-! have NO $important — allows creatives redirect rule to
-! override for /creatives/ path while passing content through.
-! ------------------------------------------------------------
+! ============================================================
+! 0. ESSENTIAL ALLOWLISTS (DO NOT REMOVE)
+! ============================================================
 
-! Fox One CDN — NO $important (intentional — see section 1)
+! Fox One video CDN — NO $important (allows creatives
+! block rule in section 2 to override for /creatives/ path)
 @@||fa.edge.foxdtc.digitalvideoplatform.com^
 @@||cf.edge.foxdtc.digitalvideoplatform.com^
 @@||foxdtc-video.akamaized.net^
@@ -48,43 +27,44 @@
 @@||foxvideo-sports.global.ssl.fastly.net^$important
 @@||fastly-sports.edge.video.fox^$important
 
-! Fox One app domains
-@@||www.fox.com^$important
+! Fox One platform APIs and app infrastructure
+@@||prod.api.digitalvideoplatform.com^$important
+@@||prod.mcvbs.foxdtc.digitalvideoplatform.com^$important
+@@||prod.player.fox.digitalvideoplatform.com^$important
 @@||api.fox.com^$important
+@@||api.foxsports.com^$important
+@@||prod.api.foxsports.com^$important
+@@||prod.api.video.fox^$important
+@@||api3.fox.com^$important
+@@||static-media.fox.com^$important
 @@||ent.fox.com^$important
 @@||id.fox.com^$important
-@@||prod.api.digitalvideoplatform.com^$important
+@@||www.fox.com^$important
+@@||config.foxplus.com^$important
+@@||images.foxplus.com^$important
+@@||prod1.fes.kts.fox^$important
 
-! ------------------------------------------------------------
-! 1. VOD AD CREATIVE SEGMENT INTERCEPT — redirect=nooptext
+! ============================================================
+! 1. HTTPS LAYER — VOD AD CREATIVE SEGMENT INTERCEPT
 ! -------------------------------------------------------
-! Returns HTTP 200 + empty body instead of dropping the
-! TCP connection. Bitmovin decodes empty MPEG-TS frame and
-! advances past the segment cleanly without NETWORK_ERROR.
-!
-! Rule precedence:
-!   @@||fa.edge.foxdtc^ (no $important, allowlist)
-!   ||fa.edge.foxdtc/*/creatives/*$redirect=nooptext,important
-!   → $important redirect beats non-important allowlist ✓
-!
-! Confirmed working path pattern from PC HAR logs:
-!   .../vod/foxone/creatives/6/6/4/5/7/7/.../
-!   u-6400-h-1280x720-6700-a-128-1-1.ts
-!   u-6400-m-852x480-1400-h-32-1-1.ts  (multiple renditions)
-! ------------------------------------------------------------
+! Returns HTTP 200 + empty body instead of dropping TCP.
+! Bitmovin advances through empty MPEG-TS frames cleanly
+! without throwing NETWORK_ERROR.
+! Requires HTTPS filtering + CA cert active on device.
+! ============================================================
 ||fa.edge.foxdtc.digitalvideoplatform.com/*/creatives/*$redirect=nooptext,important
 ||foxdtc-video.akamaized.net/*/creatives/*$redirect=nooptext,important
 
-! ------------------------------------------------------------
-! 2. VOD MANIFEST PARAMETER STRIPPING
-! ------------------------------------------------------------
+! ============================================================
+! 2. HTTPS LAYER — MANIFEST PARAMETER STRIPPING
+! ============================================================
+
+! VOD manifest — strip FreeWheel ad environment params
 *fa.edge.foxdtc*.m3u8*$removeparam=ad_env,important
 *fa.edge.foxdtc*.m3u8*$removeparam=ad,important
 
-! ------------------------------------------------------------
-! 3. LIVE STREAM YOSPACE PARAMETER STRIPPING
-! Full param list confirmed from live FS1 PC HAR 2026-03-27
-! ------------------------------------------------------------
+! Live stream — full Yospace session param strip
+! Confirmed from live FS1 manifest capture 2026-03-27
 *foxdtc-video.akamaized.net*.m3u8*$removeparam=yo.aas,important
 *foxdtc-video.akamaized.net*.m3u8*$removeparam=yo.pk,important
 *foxdtc-video.akamaized.net*.m3u8*$removeparam=yo.ap,important
@@ -99,80 +79,147 @@
 *foxdtc-video.akamaized.net*.m3u8*$removeparam=ad_env,important
 *foxdtc-video.akamaized.net*.m3u8*$removeparam=ad,important
 
-! ------------------------------------------------------------
-! 4. LEGACY FOX SPORTS YOSPACE STRIPPING
-! Keep active until Fox Sports app retires May 2026
-! ------------------------------------------------------------
-*foxvideo-sports*.m3u8*$removeparam=yo.aas,important
-*foxvideo-sports*.m3u8*$removeparam=yo.pk,important
-*foxvideo-sports*.m3u8*$removeparam=yo.ap,important
-*foxvideo-sports*.m3u8*$removeparam=yo.ai,important
-*foxvideo-sports*.m3u8*$removeparam=yo.av,important
-*foxvideo-sports*.m3u8*$removeparam=yo.lpa,important
-*foxvideo-sports*.m3u8*$removeparam=yo.mv,important
-*foxvideo-sports*.m3u8*$removeparam=yo.pbr,important
-*foxvideo-sports*.m3u8*$removeparam=yo.pdt,important
-*foxvideo-sports*.m3u8*$removeparam=yo.pst,important
-*foxvideo-sports*.m3u8*$removeparam=yo.up,important
-*foxvideo-sports*.m3u8*$removeparam=ad_env,important
+! ============================================================
+! 3. DNS LAYER — FREEWHEEL (NOERROR sinkhole)
+! Eliminates retry avalanche vs hard NXDOMAIN block
+! ============================================================
+||fwmrm.net^$dnsrewrite=NOERROR;A;0.0.0.0
+||fwgtm.akadns.net^$dnsrewrite=NOERROR;A;0.0.0.0
 
-! ------------------------------------------------------------
-! 5. CLASSIC AD SDK NEUTRALIZATION (Web/PC only)
-! ------------------------------------------------------------
-||mssl.fwmrm.net/libs/adm/*/AdManager.js$script,redirect=noopjs,domain=fox.com|foxsports.com,important
-||imasdk.googleapis.com/js/sdkloader/ima3.js$script,redirect=noopjs,domain=fox.com|foxsports.com,important
+! ============================================================
+! 4. DNS LAYER — TUBI / ADRISE (NOERROR sinkhole)
+! CSAI ad decision engine for Fox One
+! ============================================================
+||ads.production-public.tubi.io^$dnsrewrite=NOERROR;A;0.0.0.0
 
-! ------------------------------------------------------------
-! 6. PC-SPECIFIC BLOCKS
-! ------------------------------------------------------------
-||global.ketchcdn.com^$important
-||secure-gl.imrworldwide.com^$important
-||imrworldwide.com^$important
-||cdn-gl.imrworldwide.com^$important
+! ============================================================
+! 5. DNS LAYER — PROGRAMMATIC AD ECOSYSTEM
+! ============================================================
 
-! ------------------------------------------------------------
-! 7. PROGRAMMATIC AD ECOSYSTEM
-! ------------------------------------------------------------
+! DoubleVerify — viewability verification
 ||doubleverify.com^$important
 ||dv.tech^$important
+
+! The Trade Desk — programmatic DSP/bidding
 ||adsrvr.org^$important
+
+! Flashtalking — ad creative serving
 ||flashtalking.com^$important
+
+! Innovid — CTV ad serving
 ||innovid.com^$important
+
+! IAS / AdSafe — brand safety
 ||adsafeprotected.com^$important
+
+! Neustar / Agkn — audience data
 ||agkn.com^$important
+
+! iSpot.tv — CTV measurement
 ||ispot.tv^$important
+
+! TVPixel — CTV measurement
 ||tvpixel.com^$important
 
-! ------------------------------------------------------------
-! 8. SAFE-TO-BLOCK TELEMETRY
-! ------------------------------------------------------------
-||prod.pyxis.atp.fox^$important
+! VideoAmp — ad audience measurement
+||videoamp.com^$dnsrewrite=NOERROR;A;0.0.0.0
+
+! ============================================================
+! 6. DNS LAYER — NIELSEN / COMSCORE / MEASUREMENT
+! ============================================================
+||imrworldwide.com^$important
+||cdn-gl.imrworldwide.com^$important
+||secure-gl.imrworldwide.com^$important
+||scorecardresearch.com^$important
+||sb.scorecardresearch.com^$important
+||census-app.scorecardresearch.com^$important
+
+! ============================================================
+! 7. DNS LAYER — GOOGLE AD NETWORK
+! ============================================================
+||imasdk.googleapis.com^$important
+||doubleclick.net^$important
+||googleads4.g.doubleclick.net^$important
+||googleads.g.doubleclick.net^$important
+||pubads.g.doubleclick.net^$important
+||adclick.g.doubleclick.net^$important
+||securepubads.g.doubleclick.net^$important
+||googlesyndication.com^$important
+||ade.googlesyndication.com^$important
+||pagead2.googlesyndication.com^$important
+||s0.2mdn.net^$important
+
+! ============================================================
+! 8. DNS LAYER — ADOBE / OMNITURE
+! ============================================================
+||omtrdc.net^$important
+||hb.omtrdc.net^$important
+||foxsports.hb.omtrdc.net^$important
+||adobedtm.com^$important
+||demdex.net^$important
+
+! ============================================================
+! 9. DNS LAYER — TRACKERS & TELEMETRY
+! ============================================================
+
+! AppsFlyer — mobile attribution (he18fa- = ESPN/Fox account)
+||appsflyersdk.com^$important
+
+! Braze — push/engagement SDK
+||braze.com^$important
+
+! ContentSquare — UX heatmapping
+||contentsquare.net^$important
+
+! Litix (Mux Data) — video quality analytics
 ||litix.digitalvideoplatform.com^$important
 
-! ------------------------------------------------------------
-! EXPECTED BEHAVIOR AFTER THIS FIX:
-!
-! Pre-rolls: already working cleanly in v4.3 — no change
-!
-! Mid-rolls: player enters locked mode (scrub bar hides),
-!   requests creative segments → receives HTTP 200 + empty
-!   body → decodes zero-byte MPEG-TS → either:
-!   a) Advances through empty frames silently (best case)
-!   b) Brief black screen then resumes content (acceptable)
-!   c) If Bitmovin still errors: try noopvideo if supported
-!
-! AGP log confirmation — look for:
-!   creatives/*.ts → BlockType=3 (modified/redirected)
-!   status=200 (noop response served)
-!
-! If mid-rolls still break content after this fix:
-!   The player may be doing segment integrity validation.
-!   Next step would be targeting the HLS playlist itself
-!   to surgically remove #EXT-X-DISCONTINUITY and ad
-!   segment entries before they reach the player, using
-!   AGP's $hls rules if supported.
-! ------------------------------------------------------------
+! Moat — brand safety measurement
+||moatads.com^$important
+
+! Fox Pyxis — ad event telemetry
+||prod.pyxis.atp.fox^$important
+
+! Loki — Fox internal log ingestion / behavioral telemetry
+||loki-ingest.fox.com^$important
+
+! Conviva — video QoS (hashed subdomain pattern)
+||cws.conviva.com^$important
+||appgw.conviva.com^$important
+
+! Consent framework
+||global.ketchcdn.com^$important
+
+! Segment.io — analytics pipeline
+||segment.io^$important
+||segmentapis.com^$important
+
+! Fox analytics
+||analytics.fox.com^$important
+||b.fssta.com^$important
+
+! Firebase / Google measurement
+||firebaselogging-pa.googleapis.com^$important
+||app-measurement.com^$important
+
+! Social pixels
+||facebook.com^$important
+||z-m-gateway.facebook.com^$important
+
+! Audience targeting
+||d.turn.com^$important
+||tr.lrdn.com^$important
+||dmp.truoptik.com^$important
+
+! Dynata / InsightExpress — ad research
+||insightexpressai.com^$important
+
+! JWPlayer ad pings
+||prd.jwpltx.com^$important
+
+! Minute.ly — ad launcher
+||service.minute.ly^$important
 
 ! ============================================================
-! END — FOX ONE SSAI / HTTPS FILTER RULES v4.4 (AGP)
-! ============================================================
+! END — FOX ONE AGP PHONE RULESET
+! ========================================
