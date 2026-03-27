@@ -1,7 +1,7 @@
 ! ============================================================
-! FOX ONE — AGP PHONE RULESET (DNS + HTTPS)
+! FOX ONE — AGP FULL RULESET (DNS + HTTPS)
 ! Updated: 2026-03-27
-! Device: Android Phone (AGP only, no AGH router)
+! TESTED Devices: Windows PC, Android Phone (AGP only, no AGH router)
 !
 ! This file combines DNS-level blocking and HTTPS-level
 ! creative segment interception in a single ruleset.
