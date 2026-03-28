@@ -8,7 +8,9 @@ Layer 1 — AGH (DNS): Wildcard and pattern-based domain rules intercept ad infr
 For Fox One specifically, three sinkholes proved sufficient to eliminate ads entirely on PC and significantly reduce them on other devices:
 
 ||yospace.com^ — collapses the entire SSAI ad session before it initializes
+
 ||fwmrm.net^ — kills FreeWheel measurement and beacon reporting
+
 ||ads.production-public.tubi.io^ — kills the Tubi/AdRise CSAI decision layer
 
 These rules apply network-wide to every device pointed at your AGH router — PC, mobile, smart TV, and streaming sticks all benefit without any per-device configuration.
