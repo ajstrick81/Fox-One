@@ -1,33 +1,43 @@
 ! ============================================================
-! FOX ONE — MASTER FILTER v4.2 (AGH)
-! Updated: 2026-03-27
-! Replaces: foxone_master_v4_1_agh.txt
+! FOX ONE — MASTER FILTER v4.3 (AGH)
+! Updated: 2026-03-28
+! Replaces: foxone_master_v4_2_agh.txt
 !
-! Changes from v4.1:
-!   - Added full programmatic ad ecosystem domains identified
-!     during VOD ad break capture on Onn 4K TV
-!   - Added DoubleVerify (viewability verification)
-!   - Added The Trade Desk (DSP/programmatic bidding)
-!   - Added Flashtalking (ad creative serving)
-!   - Added Innovid (CTV ad serving)
-!   - Added iSpot.tv (CTV measurement)
-!   - Added IAS / AdSafe (brand safety verification)
-!   - Added Neustar/Agkn (audience data)
-!   - Added Dynata/InsightExpress (ad research)
-!   - Added s0.2mdn.net (Google DFP ad network)
-!   - Added demdex.net wildcard (Adobe AAM — tmobile, hilton etc)
-!   - Note: Tubi + FreeWheel sinkholes confirmed working
-!     (Rewritten status in AGH logs at sub-ms response time)
-!     VOD ads still play via pre-stitched SSAI — that requires
-!     AGP HTTPS filtering (see AGP file). AGH cannot intercept
-!     CDN path-level requests.
+! Changes from v4.2:
+!   - Yospace sinkhole promoted to section 2 — confirmed as
+!     the single most impactful rule in the entire file.
+!     Sinkholing Yospace collapses the entire SSAI ad stack
+!     upstream before ad segments ever reach the player.
+!     Confirmed: ads eliminated on PC VOD and live streams.
+!   - Removed raw AWS IP section (section 26 in v4.2) —
+!     IPs rotate and are unreliable long-term. Domain-based
+!     rules are the correct approach.
+!   - Added prod-bifrost-api.foxplus.com to allowlists —
+!     confirmed active in PC HAR logs (Fox content API)
+!   - Added loki-ingest.fox.com block (Fox behavioral
+!     telemetry / log ingestion pipeline)
+!   - Added yo.prod.yospace.com targeted block — Yospace
+!     production ad server, more surgical than broad
+!     yospace.com block
+!   - Added csm-e-cefoxdtcprdause1live-*.yospace.com —
+!     Fox One Yospace CSM session anchor hostname
+!     confirmed from PC HAR: bln1.yospace.com pattern
+!
+! Architecture confirmed from 2026-03-27/28 analysis:
+!   Fox One ad stack has three external dependencies:
+!   1. Yospace — SSAI session middleware (PRIMARY LEVER)
+!   2. FreeWheel — measurement/beacons
+!   3. Tubi/AdRise — CSAI ad decision engine
+!   All three sinkholed = complete ad elimination on PC.
+!   Onn VOD still delivers pre-stitched SSAI without DNS
+!   calls — requires AGP HTTPS layer + CA cert (root needed)
 ! ============================================================
 
 ! ============================================================
 ! 0. ESSENTIAL ALLOWLISTS (DO NOT REMOVE)
 ! ============================================================
 
-! Fox One primary video CDN (confirmed via PC HAR)
+! Fox One primary video CDN
 @@||foxdtc-video.akamaized.net^$important
 @@||fa.edge.foxdtc.digitalvideoplatform.com^$important
 @@||cf.edge.foxdtc.digitalvideoplatform.com^$important
@@ -57,6 +67,7 @@
 @@||config.foxplus.com^$important
 @@||images.foxplus.com^$important
 @@||prod1.fes.kts.fox^$important
+@@||prod-bifrost-api.foxplus.com^$important
 
 ! ============================================================
 ! 1. GENERIC HARDENING
@@ -64,84 +75,106 @@
 ||google.com/log?$redirect=nooptext
 
 ! ============================================================
-! 2. FREEWHEEL — NOERROR Deception Strategy
-! Confirmed working: Rewritten at 0.14-0.37ms, retry loop
-! eliminated. Covers all subdomains incl s.adex2.fwmrm.net
+! 2. YOSPACE — PRIMARY AD ELIMINATION RULE
+! -------------------------------------------------------
+! Confirmed 2026-03-28: sinkholing Yospace collapses the
+! entire Fox One SSAI ad stack. Without a reachable Yospace
+! server, the ad session never initializes and no ads are
+! stitched into the stream.
+!
+! Three rules confirmed effective together:
+!   ||yospace.com^         → broad Yospace sinkhole
+!   ||yo.prod.yospace.com^ → Yospace production ad server
+!   csm-e-cefox*           → Fox One CSM session anchor
+!
+! Confirmed working: ads eliminated on PC VOD + live.
+! Onn TV: DNS-only limitation for pre-stitched SSAI VOD.
+! ============================================================
+||yospace.com^$dnsrewrite=NOERROR;A;0.0.0.0
+||yo.prod.yospace.com^$dnsrewrite=NOERROR;A;0.0.0.0
+||csm-e-cefoxdtcprdause1live-*.yospace.com^$dnsrewrite=NOERROR;A;0.0.0.0
+
+! ============================================================
+! 3. FREEWHEEL — NOERROR Deception Strategy
+! -------------------------------------------------------
+! Confirmed working: Rewritten at 0.14-0.37ms.
+! Retry avalanche eliminated vs hard NXDOMAIN block.
+! Covers all subdomains incl s.adex2.fwmrm.net.
 ! ============================================================
 ||fwmrm.net^$dnsrewrite=NOERROR;A;0.0.0.0
 ||fwgtm.akadns.net^$dnsrewrite=NOERROR;A;0.0.0.0
 
 ! ============================================================
-! 3. TUBI / ADRISE — NOERROR Deception Strategy
-! Confirmed working: Rewritten at 0.13-0.32ms
-! Kills CSAI ad decision layer. VOD ads still delivered via
-! SSAI pre-stitch on fa.edge.foxdtc — requires AGP to block.
+! 4. TUBI / ADRISE — NOERROR Deception Strategy
+! -------------------------------------------------------
+! Confirmed working: Rewritten at 0.13-0.32ms.
+! Kills CSAI ad decision layer on Fox One.
 ! ============================================================
 ||ads.production-public.tubi.io^$dnsrewrite=NOERROR;A;0.0.0.0
 
 ! ============================================================
-! 4. DOUBLEVERIFY — Brand Safety / Viewability
+! 5. DOUBLEVERIFY — Brand Safety / Viewability
 ! ============================================================
 ||doubleverify.com^$important
 ||dv.tech^$important
 
 ! ============================================================
-! 5. THE TRADE DESK — Programmatic DSP / Bidding
+! 6. THE TRADE DESK — Programmatic DSP / Bidding
 ! ============================================================
 ||adsrvr.org^$important
 
 ! ============================================================
-! 6. FLASHTALKING — Ad Creative Serving
+! 7. FLASHTALKING — Ad Creative Serving
 ! ============================================================
 ||flashtalking.com^$important
 
 ! ============================================================
-! 7. INNOVID — CTV Ad Serving Platform
+! 8. INNOVID — CTV Ad Serving Platform
 ! ============================================================
 ||innovid.com^$important
 
 ! ============================================================
-! 8. ISPOT.TV — CTV Ad Measurement
+! 9. ISPOT.TV — CTV Ad Measurement
 ! ============================================================
 ||ispot.tv^$important
 
 ! ============================================================
-! 9. IAS / ADSAFE — Brand Safety Verification
+! 10. IAS / ADSAFE — Brand Safety Verification
 ! ============================================================
 ||adsafeprotected.com^$important
 
 ! ============================================================
-! 10. NEUSTAR / AGKN — Audience Data
+! 11. NEUSTAR / AGKN — Audience Data
 ! ============================================================
 ||agkn.com^$important
 
 ! ============================================================
-! 11. DYNATA / INSIGHTEXPRESS — Ad Research
+! 12. DYNATA / INSIGHTEXPRESS — Ad Research
 ! ============================================================
 ||insightexpressai.com^$important
 
 ! ============================================================
-! 12. GOOGLE AD NETWORK
+! 13. GOOGLE AD NETWORK
 ! ============================================================
 ||s0.2mdn.net^$important
 ||imasdk.googleapis.com^$important
 ||doubleclick.net^$important
 ||googleads4.g.doubleclick.net^$important
 ||googleads.g.doubleclick.net^$important
-||pubads.g.doubleclick.net^
-||adclick.g.doubleclick.net^
-||securepubads.g.doubleclick.net^
-||googlesyndication.com^
+||pubads.g.doubleclick.net^$important
+||adclick.g.doubleclick.net^$important
+||securepubads.g.doubleclick.net^$important
+||googlesyndication.com^$important
 ||ade.googlesyndication.com^$important
 ||pagead2.googlesyndication.com^$important
-||googletagservices.com^
-||googletagmanager.com^
+||googletagservices.com^$important
+||googletagmanager.com^$important
 
 ! ============================================================
-! 13. AD MEASUREMENT / ATTRIBUTION (Passengers)
+! 14. AD MEASUREMENT / ATTRIBUTION
 ! ============================================================
 
-! VideoAmp
+! VideoAmp — cross-platform audience measurement
 ||videoamp.com^$dnsrewrite=NOERROR;A;0.0.0.0
 
 ! Nielsen
@@ -156,50 +189,57 @@
 
 ! Moat
 ||z.moatads.com^$important
-||moatads.com^
+||moatads.com^$important
 
-! Adobe Audience Manager (demdex) — catches all brand segments
-! (tmobile.demdex.net, hilton.demdex.net, etc)
+! Adobe Audience Manager — catches all brand segments
 ||demdex.net^$important
 
+! TVPixel — CTV measurement
+||tvpixel.com^$important
+
 ! ============================================================
-! 14. JWPLAYER AD PINGS
+! 15. JWPLAYER AD PINGS
 ! ============================================================
 ||prd.jwpltx.com^$important
 
 ! ============================================================
-! 15. FOX / MINUTE.LY AD LAUNCHER
+! 16. FOX / MINUTE.LY AD LAUNCHER
 ! ============================================================
 ||service.minute.ly^$important
+||snippet.minute.ly^$important
+||minute.ly^$important
 
 ! ============================================================
-! 16. AUDIENCE TARGETING
+! 17. AUDIENCE TARGETING
 ! ============================================================
 ||d.turn.com^$important
 ||tr.lrdn.com^$important
 ||dmp.truoptik.com^$important
+||rlcdn.com^$important
 
 ! ============================================================
-! 17. FOX PYXIS — AD EVENT TELEMETRY
+! 18. FOX PYXIS — AD EVENT TELEMETRY
 ! ============================================================
 ||prod.pyxis.atp.fox^$important
 
 ! ============================================================
-! 18. CONSENT / PRIVACY FRAMEWORK
+! 19. CONSENT / PRIVACY FRAMEWORK
 ! ============================================================
 ||global.ketchcdn.com^$important
 
 ! ============================================================
-! 19. FOX ANALYTICS & SEGMENT.IO
+! 20. FOX ANALYTICS & SEGMENT.IO
 ! ============================================================
-||segment.io^
-||api.segment.io^
-||cdn.segment.io^
-||segmentapis.com^
-||silver-fir.cd.segmentapis.com^
+||segment.io^$important
+||api.segment.io^$important
+||cdn.segment.io^$important
+||segmentapis.com^$important
+||silver-fir.cd.segmentapis.com^$important
+||analytics.fox.com^$important
+||cdn.analytics.fox.com^$important
 
 ! ============================================================
-! 20. STARTUP TRACKERS (Confirmed Fox One session)
+! 21. STARTUP TRACKERS
 ! ============================================================
 
 ! AppsFlyer — ffrmtg- prefix = Fox's account tag
@@ -214,67 +254,52 @@
 ! Litix (Mux Data) — video quality analytics
 ||litix.digitalvideoplatform.com^$important
 
+! Loki — Fox internal behavioral telemetry / log ingestion
+||loki-ingest.fox.com^$important
+
 ! ============================================================
-! 21. SOCIAL + PIXELS + TRACKERS
+! 22. SOCIAL + PIXELS + TRACKERS
 ! ============================================================
 ||b.fssta.com^$important
 ||aws-useast-pixels.s3.amazonaws.com^$important
 ||facebook.com^$important
 ||web.facebook.com^$important
+||z-m-gateway.facebook.com^$important
 
 ! ============================================================
-! 22. ADOBE / OMNITURE / MARKETING CLOUD
+! 23. ADOBE / OMNITURE / MARKETING CLOUD
 ! ============================================================
 ||omtrdc.net^$important
 ||hb.omtrdc.net^$important
 ||foxsports.hb.omtrdc.net^$important
-||adobedtm.com^
+||adobedtm.com^$important
 
 ! ============================================================
-! 23. MISC FOX TELEMETRY / TRACKERS
+! 24. MISC TELEMETRY / TRACKERS
 ! ============================================================
-||analytics.fox.com^
-||cdn.analytics.fox.com^
-||metrics.brightcove.com^
-||edge.api.brightcove.com^
+||metrics.brightcove.com^$important
+||edge.api.brightcove.com^$important
+||fwcdn.com^$important
+||freewheel-edge.com^$important
 
 ! ============================================================
-! 24. VIDEO / STREAMING-ADJACENT (SAFE TO BLOCK)
+! 25. VIDEO / STREAMING-ADJACENT (SAFE TO BLOCK)
 ! ============================================================
-||ad-delivery.net^
-||delivery.vidible.tv^
-||ads.fox.com^
+||ad-delivery.net^$important
+||delivery.vidible.tv^$important
+||ads.fox.com^$important
 
 ! ============================================================
-! 25. DNS-TYPE HARDENING
+! 26. DNS-TYPE HARDENING
 ! ============================================================
 ||b.fssta.com^$dnstype=A
 ||cdn-gl.imrworldwide.com^$dnstype=A
 ||cdn-gl.imrworldwide.com^$dnstype=AAAA
 
-! ============================================================
-! 26. RAW AWS SERVERS (From early Fox Sports traces)
-! ============================================================
-||18.160.200.117^
-||52.25.160.34^
-||54.201.129.252^
-||100.21.42.174^
-||18.216.55.3^
-||3.5.82.161^
-||13.32.205.37^
-||52.85.12.26^
-||34.214.209.109^
-||34.211.234.210^
-||52.24.152.97^
-||44.226.71.2^
-||44.237.108.147^
-||35.80.112.79^
-||52.34.117.218^
-||54.200.25.46^
-
-! NOTE: j.sni.global.fastly.net — still flagged as risky.
+! NOTE: j.sni.global.fastly.net — still flagged as risky,
+! shared Fastly SNI routing domain. Test before blocking.
 ! ||j.sni.global.fastly.net^
 
 ! ============================================================
-! END — FOX ONE MASTER FILTER v4.2 (AGH)
+! END — FOX ONE MASTER FILTER v4.3 (AGH)
 ! ============================================================
