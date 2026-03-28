@@ -1,5 +1,5 @@
 ! ============================================================
-! FOX ONE — AGP PHONE RULESET v4.5 (Android)
+! FOX ONE — WINDOWS PC RULESET v4.5 (PC)
 ! Updated: 2026-03-27
 ! Replaces: foxone_phone_agp_only.txt
 !
