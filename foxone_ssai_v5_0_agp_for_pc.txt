@@ -1,0 +1,181 @@
+! ============================================================
+! FOX ONE — SSAI / HTTPS FILTER RULES v5.0 (AGP)
+! Updated: 2026-04-01
+! Replaces: foxone_ssai_v4_5_agp.txt
+!
+! *** FIX IN THIS VERSION ***
+! v4.3 confirmed pre-rolls blocked successfully. Mid-rolls
+! were causing NETWORK_ERROR and stopping playback entirely.
+!
+! Root cause: creatives block rule was dropping the TCP
+! connection (status=0 in AGP log). Bitmovin receives a
+! sudden connection refusal mid-stream and throws
+! NETWORK_ERROR — it has no graceful handling for a dead
+! connection during active media pipeline playback.
+!
+! Pre-rolls skip cleanly because Bitmovin has higher
+! tolerance for segment failures before content begins.
+! Mid-rolls are catastrophic — player is already in a
+! running pipeline and connection refusal breaks it.
+!
+! Fix: redirect=nooptext instead of hard block.
+! AGP returns HTTP 200 with empty body. Bitmovin receives
+! a valid response, attempts to decode zero bytes as
+! MPEG-TS, gets empty/corrupt frame, and advances past
+! the segment rather than throwing NETWORK_ERROR.
+!
+! The single changed lines vs v4.3:
+!   BEFORE: .../creatives/*$important
+!   AFTER:  .../creatives/*$redirect=nooptext,important
+! ============================================================
+
+! ------------------------------------------------------------
+! 0. ALLOWLISTS — VIDEO DELIVERY AND APP INFRASTRUCTURE
+! -------------------------------------------------------
+! fa.edge.foxdtc and foxdtc-video.akamaized intentionally
+! have NO $important — allows creatives redirect rule to
+! override for /creatives/ path while passing content through.
+! ------------------------------------------------------------
+
+! Fox One CDN — NO $important (intentional — see section 1)
+@@||fa.edge.foxdtc.digitalvideoplatform.com^
+@@||cf.edge.foxdtc.digitalvideoplatform.com^
+@@||foxdtc-video.akamaized.net^
+
+! Legacy Fox Sports CDN
+@@||foxvideo-sports.akamaized.net^$important
+@@||foxvideo-sports-cf.video.fox^$important
+@@||foxvideo-sports.global.ssl.fastly.net^$important
+@@||fastly-sports.edge.video.fox^$important
+
+! Fox One app domains
+@@||www.fox.com^$important
+@@||api.fox.com^$important
+@@||ent.fox.com^$important
+@@||id.fox.com^$important
+@@||prod.api.digitalvideoplatform.com^$important
+@@||fa.edge.foxdtc.digitalvideoplatform.com/*/*.m3u8$important
+@@||fa.edge.foxdtc.digitalvideoplatform.com/*/csm/builder/*$important
+
+! ------------------------------------------------------------
+! 1. VOD AD CREATIVE SEGMENT INTERCEPT — redirect=nooptext
+! -------------------------------------------------------
+! Returns HTTP 200 + empty body instead of dropping the
+! TCP connection. Bitmovin decodes empty MPEG-TS frame and
+! advances past the segment cleanly without NETWORK_ERROR.
+!
+! Rule precedence:
+!   @@||fa.edge.foxdtc^ (no $important, allowlist)
+!   ||fa.edge.foxdtc/*/creatives/*$redirect=nooptext,important
+!   → $important redirect beats non-important allowlist ✓
+!
+! Confirmed working path pattern from PC HAR logs:
+!   .../vod/foxone/creatives/6/6/4/5/7/7/.../
+!   u-6400-h-1280x720-6700-a-128-1-1.ts
+!   u-6400-m-852x480-1400-h-32-1-1.ts  (multiple renditions)
+! ------------------------------------------------------------
+||fa.edge.foxdtc.digitalvideoplatform.com/*/creatives/*$redirect=noopmp4-1s,important
+||foxdtc-video.akamaized.net/*/creatives/*$redirect=nooptext,important
+fox.com#%#//scriptlet("abort-on-stack-trace", "pause", "bitmovin")
+
+! ------------------------------------------------------------
+! 2. VOD MANIFEST PARAMETER STRIPPING
+! ------------------------------------------------------------
+*fa.edge.foxdtc*.m3u8*$removeparam=ad_env,important
+*fa.edge.foxdtc*.m3u8*$removeparam=ad,important
+
+! ------------------------------------------------------------
+! 3. LIVE STREAM YOSPACE PARAMETER STRIPPING
+! Full param list confirmed from live FS1 PC HAR 2026-03-27
+! ------------------------------------------------------------
+*foxdtc-video.akamaized.net*.m3u8*$removeparam=yo.aas,important
+*foxdtc-video.akamaized.net*.m3u8*$removeparam=yo.pk,important
+*foxdtc-video.akamaized.net*.m3u8*$removeparam=yo.ap,important
+*foxdtc-video.akamaized.net*.m3u8*$removeparam=yo.ai,important
+*foxdtc-video.akamaized.net*.m3u8*$removeparam=yo.av,important
+*foxdtc-video.akamaized.net*.m3u8*$removeparam=yo.lpa,important
+*foxdtc-video.akamaized.net*.m3u8*$removeparam=yo.mv,important
+*foxdtc-video.akamaized.net*.m3u8*$removeparam=yo.pbr,important
+*foxdtc-video.akamaized.net*.m3u8*$removeparam=yo.pdt,important
+*foxdtc-video.akamaized.net*.m3u8*$removeparam=yo.pst,important
+*foxdtc-video.akamaized.net*.m3u8*$removeparam=yo.up,important
+*foxdtc-video.akamaized.net*.m3u8*$removeparam=ad_env,important
+*foxdtc-video.akamaized.net*.m3u8*$removeparam=ad,important
+
+! ------------------------------------------------------------
+! 4. LEGACY FOX SPORTS YOSPACE STRIPPING
+! Keep active until Fox Sports app retires May 2026
+! ------------------------------------------------------------
+*foxvideo-sports*.m3u8*$removeparam=yo.aas,important
+*foxvideo-sports*.m3u8*$removeparam=yo.pk,important
+*foxvideo-sports*.m3u8*$removeparam=yo.ap,important
+*foxvideo-sports*.m3u8*$removeparam=yo.ai,important
+*foxvideo-sports*.m3u8*$removeparam=yo.av,important
+*foxvideo-sports*.m3u8*$removeparam=yo.lpa,important
+*foxvideo-sports*.m3u8*$removeparam=yo.mv,important
+*foxvideo-sports*.m3u8*$removeparam=yo.pbr,important
+*foxvideo-sports*.m3u8*$removeparam=yo.pdt,important
+*foxvideo-sports*.m3u8*$removeparam=yo.pst,important
+*foxvideo-sports*.m3u8*$removeparam=yo.up,important
+*foxvideo-sports*.m3u8*$removeparam=ad_env,important
+
+! ------------------------------------------------------------
+! 5. CLASSIC AD SDK NEUTRALIZATION (Web/PC only)
+! ------------------------------------------------------------
+||mssl.fwmrm.net/libs/adm/*/AdManager.js$script,redirect=noopjs,domain=fox.com|foxsports.com,important
+||imasdk.googleapis.com/js/sdkloader/ima3.js$script,redirect=noopjs,domain=fox.com|foxsports.com,important
+
+! ------------------------------------------------------------
+! 6. PC-SPECIFIC BLOCKS
+! ------------------------------------------------------------
+||global.ketchcdn.com^$important
+||secure-gl.imrworldwide.com^$important
+||imrworldwide.com^$important
+||cdn-gl.imrworldwide.com^$important
+
+! ------------------------------------------------------------
+! 7. PROGRAMMATIC AD ECOSYSTEM
+! ------------------------------------------------------------
+||doubleverify.com^$important
+||dv.tech^$important
+||adsrvr.org^$important
+||flashtalking.com^$important
+||innovid.com^$important
+||adsafeprotected.com^$important
+||agkn.com^$important
+||ispot.tv^$important
+||tvpixel.com^$important
+
+! ------------------------------------------------------------
+! 8. SAFE-TO-BLOCK TELEMETRY
+! ------------------------------------------------------------
+||prod.pyxis.atp.fox^$important
+||litix.digitalvideoplatform.com^$important
+
+! ------------------------------------------------------------
+! EXPECTED BEHAVIOR AFTER THIS FIX:
+!
+! Pre-rolls: already working cleanly in v4.3 — no change
+!
+! Mid-rolls: player enters locked mode (scrub bar hides),
+!   requests creative segments → receives HTTP 200 + empty
+!   body → decodes zero-byte MPEG-TS → either:
+!   a) Advances through empty frames silently (best case)
+!   b) Brief black screen then resumes content (acceptable)
+!   c) If Bitmovin still errors: try noopvideo if supported
+!
+! AGP log confirmation — look for:
+!   creatives/*.ts → BlockType=3 (modified/redirected)
+!   status=200 (noop response served)
+!
+! If mid-rolls still break content after this fix:
+!   The player may be doing segment integrity validation.
+!   Next step would be targeting the HLS playlist itself
+!   to surgically remove #EXT-X-DISCONTINUITY and ad
+!   segment entries before they reach the player, using
+!   AGP's $hls rules if supported.
+! ------------------------------------------------------------
+
+! ============================================================
+! END — FOX ONE SSAI / HTTPS FILTER RULES v4.4 (AGP)
+! ============================================================
